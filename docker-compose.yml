@@ -1,0 +1,121 @@
+name: marketplace
+
+services:
+  postgres-dwh:
+    image: postgres:16-alpine
+    container_name: postgres-dwh
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg-dwh-data:/var/lib/postgresql/data
+      # Exécuté uniquement au premier démarrage (volume vide)
+      - ./init-db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    # Les images officielles minio/minio ne sont plus publiées : fork communautaire pgsty
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"   # API S3
+      - "9001:9001"   # Console web
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio-init:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
+      mc mb --ignore-existing local/$${MINIO_BUCKET} &&
+      echo 'Bucket '$${MINIO_BUCKET}' prêt'
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    restart: "no"
+
+  api-marketplace:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: api-marketplace
+    environment:
+      API_TOKEN: ${API_TOKEN}
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  metabase:
+    image: metabase/metabase:v0.50.36
+    container_name: metabase
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+    ports:
+      - "3000:3000"
+    volumes:
+      - metabase-data:/metabase-data
+    depends_on:
+      postgres-dwh:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+  # Lancé à la demande : docker compose run --rm pipeline <commande>
+  pipeline:
+    build:
+      context: .
+      dockerfile: pipeline/Dockerfile
+    container_name: pipeline
+    profiles: ["tools"]
+    env_file: .env
+    volumes:
+      # Montage du code pour éviter un rebuild à chaque modification
+      - ./pipeline:/app/pipeline
+      - ./sql:/app/sql
+    depends_on:
+      postgres-dwh:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      api-marketplace:
+        condition: service_healthy
+
+volumes:
+  pg-dwh-data:
+  minio-data:
+  metabase-data:
