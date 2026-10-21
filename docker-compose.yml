@@ -66,13 +66,22 @@ services:
     container_name: api-marketplace
     environment:
       API_TOKEN: ${API_TOKEN}
+      CATALOG_SIZE: ${CATALOG_SIZE:-18000}
+      QUALITY_DEFECTS: ${QUALITY_DEFECTS:-true}
+      API_ERROR_RATE: ${API_ERROR_RATE:-0}
+      API_MAX_LATENCY_MS: ${API_MAX_LATENCY_MS:-0}
     ports:
       - "5000:5000"
+    volumes:
+      # Code monté : un simple restart suffit après modification
+      - ./generator:/app/generator
+      - ./api:/app/api
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
     restart: unless-stopped
 
   metabase:

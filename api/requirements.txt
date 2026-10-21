@@ -1,2 +1,4 @@
 flask==3.0.3
 gunicorn==22.0.0
+faker==30.8.2
+numpy==2.1.3
