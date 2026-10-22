@@ -142,3 +142,14 @@ Les commandes `cancelled` et `refunded` sont conservées dans `fact_orders` mais
 ```bash
 docker compose run --rm pipeline extract --date 2026-04-07   # test du client
 ```
+
+## Pipeline ELT
+
+```bash
+docker compose run --rm pipeline run --date 2026-04-07                       # une date
+docker compose run --rm pipeline backfill --start 2026-08-22 --end 2026-10-20 # une période
+docker compose run --rm pipeline replay --date 2026-04-07                    # rejoue depuis MinIO, sans l'API
+docker compose run --rm pipeline refresh-dims                                # recharge les dimensions
+```
+
+Étapes : extract (API) → raw (`s3://data-lake/raw/orders/dt=YYYY-MM-DD/data.json`) → load (`staging.orders`) → transform (`dwh.fact_orders`) → aggregate (`analytics.*`). Chaque étape remplace la journée (DELETE + INSERT dans une transaction) : relancer une date ne crée jamais de doublons.
