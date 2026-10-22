@@ -124,3 +124,13 @@ Réponse paginée : `{"page", "page_size", "total", "total_pages", "data": [...]
 Pour simuler une API instable et tester le retry du client, définir dans le `.env` (puis `docker compose up -d api-marketplace`) :
 - `API_ERROR_RATE=0.05` : 5 % des appels répondent 503 ;
 - `API_MAX_LATENCY_MS=2000` : ajoute une latence aléatoire de 0 à 2 s.
+
+## Modèle de données
+
+Trois schémas Postgres, définis dans [init-db/schema.sql](init-db/schema.sql) :
+
+- `staging` : copie brute de l'API (doublons et défauts compris) ;
+- `dwh` : modèle en étoile, avec `fact_orders` (grain : une ligne de commande) et les dimensions `dim_date`, `dim_seller`, `dim_product` ;
+- `analytics` : agrégats quotidiens `daily_summary`, `seller_daily`, `category_daily`.
+
+Les commandes `cancelled` et `refunded` sont conservées dans `fact_orders` mais exclues du CA (`status = 'paid'`), et leur commission vaut 0.
