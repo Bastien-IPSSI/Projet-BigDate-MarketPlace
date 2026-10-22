@@ -1,15 +1,21 @@
 """Point d'entrée : python -m pipeline <commande>.
 
-Premier commit : seule la commande `check` existe (vérifie la connexion aux services).
+    check                     vérifie la connexion à Postgres, MinIO et l'API
+    extract --date 2026-04-07 récupère les commandes d'un jour via le client API
+
 Les commandes run / backfill / refresh-dims / replay seront développées ultérieurement.
 """
 import argparse
+import logging
 import os
 import sys
+from datetime import date
 
 import boto3
 import psycopg2
 import requests
+
+from pipeline.client import MarketplaceAPIClient
 
 
 def check() -> int:
@@ -56,14 +62,26 @@ def check() -> int:
     return 0 if ok else 1
 
 
+def extract(day: date) -> int:
+    orders = MarketplaceAPIClient().get_orders(day)
+    print(f"Commandes du {day} : {len(orders)} lignes")
+    print(f"Exemple : {orders[0]}")
+    return 0
+
+
 def main() -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     parser = argparse.ArgumentParser(prog="pipeline")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check", help="Vérifie la connexion à Postgres, MinIO et l'API")
+    p = sub.add_parser("extract", help="Récupère les commandes d'un jour (test du client API)")
+    p.add_argument("--date", type=date.fromisoformat, required=True)
     args = parser.parse_args()
 
     if args.command == "check":
         return check()
+    if args.command == "extract":
+        return extract(args.date)
     return 1
 
 

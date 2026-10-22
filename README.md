@@ -134,3 +134,11 @@ Trois schémas Postgres, définis dans [init-db/schema.sql](init-db/schema.sql) 
 - `analytics` : agrégats quotidiens `daily_summary`, `seller_daily`, `category_daily`.
 
 Les commandes `cancelled` et `refunded` sont conservées dans `fact_orders` mais exclues du CA (`status = 'paid'`), et leur commission vaut 0.
+
+## Client API
+
+[pipeline/client.py](pipeline/client.py) contient `MarketplaceAPIClient`, qui remplace le Hook Airflow. Il lit l'URL et le token dans le `.env`, gère seul la pagination et réessaie automatiquement en cas de timeout ou d'erreur 5xx (5 tentatives, backoff exponentiel). Sur une erreur 4xx, il échoue immédiatement.
+
+```bash
+docker compose run --rm pipeline extract --date 2026-04-07   # test du client
+```
