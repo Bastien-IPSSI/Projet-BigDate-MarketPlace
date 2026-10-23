@@ -153,3 +153,17 @@ docker compose run --rm pipeline refresh-dims                                # r
 ```
 
 Étapes : extract (API) → raw (`s3://data-lake/raw/orders/dt=YYYY-MM-DD/data.json`) → load (`staging.orders`) → transform (`dwh.fact_orders`) → aggregate (`analytics.*`). Chaque étape remplace la journée (DELETE + INSERT dans une transaction) : relancer une date ne crée jamais de doublons.
+
+## Dashboards Metabase
+
+Metabase : http://localhost:3000. Trois dashboards, alimentés par les requêtes de [sql/metabase/](sql/metabase/) : **Executive Summary** (CA du jour, CA sur 30 jours, top 5 des vendeurs), **Top Sellers** (top 10 du mois, évolution des top 3, vendeurs inactifs) et **Finance** (commissions par jour, cumul mensuel).
+
+### Restaurer la sauvegarde
+
+```powershell
+docker compose stop metabase
+docker run --rm -v marketplace_metabase-data:/data -v "${PWD}\metabase:/backup" alpine:3.20 sh -c "rm -rf /data/* && tar xzf /backup/metabase-data.tar.gz -C /data"
+docker compose start metabase
+```
+
+Lancer ensuite le backfill pour avoir des données : `docker compose run --rm pipeline backfill --start 2026-08-22 --end 2026-10-20`.
